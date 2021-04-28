@@ -1,0 +1,208 @@
+# This dynamic programming algorithm computes the
+# (t,r) broadcast domination number of an m by n directed grid
+# % time
+
+from sage.graphs.distances_all_pairs import distances_all_pairs
+from sage.graphs.orientations import random_orientation
+
+# ### Calculate the distance between two vertices ##############
+# Input : Array containing all directed distances between vertices, vertices' locations in grid
+# Output : Length of shortest path from v1 to v2
+# ############################################################
+def dist (distances, v1 , v2 ) :
+    # return abs ( v1 [0] - v2 [0]) + abs ( v1 [1] - v2 [1])
+    return (distances.get(v1)).get(v2)
+
+# ### List difference ##################################
+# Input : Two lists
+# Output : The relative complement : l1 - l2
+# ###################################################
+def diff ( l1 , l2 ) :
+    difference = [ element for element in l1 if element not in l2 ]
+    return difference
+
+
+# ### Manipulate G to show current weight ##########
+# Input : a graph, graph dimensions m, n, list of vertices to highlight ,
+# weight of domination
+# Output : Updated matrix of weights
+# ################################################
+
+def highlight ( graph , candidate , m , n , t ) :
+    G = matrix (m , n)
+    for vertex in candidate :
+        h = 0
+        while h < m :
+            k = 0
+            while k < n :
+                d = dist(distances_all_pairs(graph), vertex, ( h , k ))
+                if d < t :
+                    G [ h , k ] = G[ h , k ] + t - d
+                k += 1
+            h += 1
+    return G
+
+# print(highlight(g, [(0,0), (1,3)], 2 , 6, 3))
+
+## Check to see if the current domination set dominates G ###
+# Input : Matrix of weights
+# Output : True or False depending on if dominated
+# #####################################################
+def domination_check (G , r) :
+    h = 0
+    while h < G . nrows () :
+        k = 0
+        while k < G . ncols () :
+            if G [ h , k ] < r :
+                return False
+            k += 1
+        h += 1
+    return True
+
+
+## Create a lexicographical list of vertices ########
+# Input : Size of grid , n,m
+# Output : Lexicographical list of vertices , row by row
+# #####################################################
+def lex_vertices ( n , m ) :
+    vertices = []
+    for i in range (0 , n ) :
+        for j in range (0 , m ) :
+            vertices.append(( i , j ))
+    return vertices
+
+
+## Create non - dominated set of List ##########################
+# Input : grid graph, domination list candidate , m,n size of grid , domination weight
+# Output : list of undominated vertices
+# ################################################################
+def list_nondom ( graph, candidate , m , n , t , r ) :
+    G = highlight ( graph, candidate , m , n , t )
+    undominated = []
+    h = 0
+    while h < m :
+        k = 0
+        while k < n :
+            if G[ h , k ] < r :
+                undominated.append([ h , k ]) #was brackets changed to parens
+            k += 1
+        h += 1
+    return undominated
+
+
+## Turn a List of List-type coordinates into a List of Tuple-type coordinates #####
+# Input: List of 2-entry Lists
+# Output: List of 2-entry Tuples
+# ################################################################
+def listsToTuples(listOfNonTuples):
+    listOfTuples=[]
+    for element in listOfNonTuples:
+        listOfTuples.append(tuple(element))
+    return listOfTuples
+
+
+# #### bdn () Broadcast Domination Number #########################
+# Input : m,n size of grid , w the domination weight
+# Output : (t,r) broadcast domination number of m x n grid
+# ###############################################################
+def bdn (graph, m , n , t = 2 , r = 2) :
+    # Declare Variable for Main Loop
+    domination_list_candidates = [[]]
+    domination_lists = []
+    len_domination_lists = []
+    vertices = lex_vertices (m , n)
+    distances = distances_all_pairs(graph)
+    # Main Loop : Go through domination list candidates ,
+    # and extend them into dominating lists
+    for item in domination_list_candidates :
+        new_domination_list_candidates = []
+        un_dom = list_nondom (graph, item , m , n , t , r )
+        # Select lexicogrphapically first non - dominated vertex
+        if un_dom != []:
+            target = un_dom [0]
+        # Look for all lexicographically larger vertices near the target
+        # make new domination list candidates based on them
+        for v in diff ( vertices , item ):
+            if v [0] >= target [0]:
+                if v [1] >= target [1]:
+                    if t - dist (distances, tuple(v), tuple(target) ) >= 1:
+                        c_item = copy( item )
+                        c_item.append ( v )
+                        new_domination_list_candidates . append ( c_item )
+        # Check for redundant and inefficient domination list candidates
+        copy_ndlc = copy ( new_domination_list_candidates )
+        for i in range (len ( new_domination_list_candidates ) ) :
+            nextCandidate = new_domination_list_candidates.pop(0)
+            fixedCandidate = listsToTuples(nextCandidate)
+            h1 = highlight ( graph, fixedCandidate , m , n , t )
+            for element in new_domination_list_candidates :
+                if fixedCandidate != element :
+                    if len ( fixedCandidate ) >= len ( element ) :
+                        h2 = highlight ( graph, listsToTuples( element ) ,m ,n , t )
+                        check = 0
+                        for v in vertices :
+                            if h1 [ v [0] , v [1]] >= r :
+                                if h2 [ v [0] , v [1]] < r :
+                                    check = 1
+                                    break
+                            else :
+                                if h1 [ v [0] , v [1]] > h2 [ v [0] , v [1]]:
+                                    check = 1
+                                    break
+                        if check == 0:
+                            copy_ndlc = diff ( copy_ndlc , [ fixedCandidate ])
+        domination_list_candidates.extend( copy_ndlc )
+    # Sort through domination list candidates for dominating sets
+    for item in domination_list_candidates :
+        if domination_check( highlight ( graph, tuple(item) , m , n , t ) , r ) == True :
+            domination_lists.append( tuple(item) )
+    # Find minimum dominating set length
+    for item in domination_lists :
+        len_domination_lists.append( len( item ) )
+    return min( len_domination_lists )
+
+
+### Putting the program to use #########
+
+# edit these
+numRows = 3
+numCols = 5
+t = 2
+r = 2
+
+G = graphs.Grid2dGraph(numRows, numCols) #create a 2 by numCols grid graph
+it = G.orientations() #an iterator over all orientations of G
+
+minBdn = numRows * numCols #an easy upper bound on the dom number is all vertices
+minBdnOrientation = random_orientation(G)
+
+maxBdn = 0 #an easy lower bound on the dom number is 0 vertices
+maxBdnOrientation = random_orientation(G)
+
+
+# #USE THIS CODE TO CYCLE THROUGH ##ALL## ORIENTATIONS
+# for orientation in it:
+#     bdnCurrent = bdn(orientation, numRows, numCols, t, r)
+#     if bdnCurrent > maxBdn:
+#         maxBdn = bdnCurrent
+#         maxBdnOrientation = orientation
+#     if bdnCurrent < minBdn:
+#         minBdn = bdnCurrent
+#         minBdnOrientation = orientation
+# print("Directed broadcast domination interval of a {} by {} grid graph with t = {} and r = {} is: [{},{}]".format(numRows, numCols, t, r, minBdn, maxBdn))
+
+# USE THIS CODE TO CYCLE THROUGH ##SOME## ORIENTATIONS
+numRandOrientations = 2^2
+for i in range( numRandOrientations ):
+    D = random_orientation(G)
+    bdnCurrent = bdn(D, numRows, numCols, t, r)
+    if bdnCurrent > maxBdn:
+        maxBdn = bdnCurrent
+        maxBdnOrientation = D
+    if bdnCurrent < minBdn:
+        minBdn = bdnCurrent
+        minBdnOrientation = D
+print("USING {} RANDOM ORIENTATIONS: Directed broadcast domination interval of a {} by {} grid graph with t = {} and r = {} is: [{},{}]".format(numRandOrientations, numRows, numCols, t, r, minBdn, maxBdn))
+
+minBdnOrientation.show()
+maxBdnOrientation.show()
